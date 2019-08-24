@@ -1,6 +1,6 @@
 image: Ubuntu1804
 
-version: 1.6.1.{build}
+version: 1.6.2.{build}
 
 branches:
     only:
@@ -127,6 +127,7 @@ install:
     - export PATH=$(pwd)/go/bin:$PATH
     - export GO111MODULE=on
     - git clone --recursive https://github.com/coredns/coredns.git
+    - git checkout v1.6.2
 
 # scripts that run before build
 before_build:
