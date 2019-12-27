@@ -1,6 +1,6 @@
 image: Ubuntu1804
 
-version: 1.6.2.{build}
+version: 1.6.6.{build}
 
 branches:
     only:
@@ -97,19 +97,43 @@ environment:
           SUFFIX: 
         - GOOS: linux
           GOARCH: mips64
-          PREFIX: linux-mips64
+          GOMIPS: hardfloat
+          PREFIX: linux-mips64-hardfloat
+          SUFFIX: 
+        - GOOS: linux
+          GOARCH: mips64
+          GOMIPS: softfloat
+          PREFIX: linux-mips64-softfloat
           SUFFIX: 
         - GOOS: linux
           GOARCH: mips64le
-          PREFIX: linux-mips64le
+          GOMIPS: hardfloat
+          PREFIX: linux-mips64le-hardfloat
+          SUFFIX: 
+        - GOOS: linux
+          GOARCH: mips64le
+          GOMIPS: softfloat
+          PREFIX: linux-mips64le-softfloat
           SUFFIX: 
         - GOOS: linux
           GOARCH: mips
-          PREFIX: linux-mips
+          GOMIPS: hardfloat
+          PREFIX: linux-mips-hardfloat
+          SUFFIX: 
+        - GOOS: linux
+          GOARCH: mips
+          GOMIPS: softfloat
+          PREFIX: linux-mips-softfloat
           SUFFIX: 
         - GOOS: linux
           GOARCH: mipsle
-          PREFIX: linux-mipsle
+          GOMIPS: hardfloat
+          PREFIX: linux-mipsle-hardfloat
+          SUFFIX: 
+        - GOOS: linux
+          GOARCH: mipsle
+          GOMIPS: softfloat
+          PREFIX: linux-mipsle-softfloat
           SUFFIX: 
         - GOOS: linux
           GOARCH: s390x
@@ -120,14 +144,15 @@ clone_depth: 1
 
 # scripts that run after cloning repository
 install:
-    - export GOVERSION=1.12.7
+    - export GOVERSION=1.13.5
     - wget "https://storage.googleapis.com/golang/go$GOVERSION.linux-amd64.tar.gz"
     - tar xzf "go$GOVERSION.linux-amd64.tar.gz"
     - export GOROOT=$(pwd)/go
     - export PATH=$(pwd)/go/bin:$PATH
     - export GO111MODULE=on
-    - git clone --recursive https://github.com/coredns/coredns.git
-    - git checkout v1.6.2
+    - export GOPROXY=direct
+    - git clone --depth=1 https://github.com/coredns/coredns.git
+    - git clone --depth=1 https://github.com/coredns/fallback.git
 
 # scripts that run before build
 before_build:
@@ -136,11 +161,22 @@ before_build:
 
 # custom build scripts
 build_script:
+    - cd fallback
+    - git apply "$APPVEYOR_BUILD_FOLDER/fallback.patch"
+    - go mod init github.com/coredns/fallback
+    - cd ..
     - cd coredns
-    - echo "block:github.com/missdeer/block" >> plugin.cfg
-    - echo "proxy:github.com/missdeer/proxy" >> plugin.cfg
-    - env GOOS=linux GOARCH=amd64 make -j 4
-    - make -j 4
+    - git apply "$APPVEYOR_BUILD_FOLDER/forward-quick-lookup-except.patch"
+    - sed -i 's|forward:forward|fallback:github.com/coredns/fallback\nforward:forward\nproxy:github.com/coredns/proxy|g' plugin.cfg
+    - sed -i 's|hosts:hosts|ads:github.com/c-mueller/ads\nhosts:hosts|g' plugin.cfg
+    - sed -i 's|cache:cache|cache:cache\nredisc:github.com/miekg/redis|g' plugin.cfg
+    - sed -i 's|rewrite:rewrite|rewrite:rewrite\nbogus:github.com/missdeer/bogus\nipset:github.com/missdeer/ipset|g' plugin.cfg
+    - sed -i 's|replace (|replace (\n\tgithub.com/coredns/fallback => ../fallback|g' go.mod
+    - env GOOS=linux GOARCH=amd64 make -j 2
+    - echo "==============================================="
+    - ./coredns -plugins
+    - echo "==============================================="
+    - make -j 2
     - cd ..
 
 # scripts that run after build
